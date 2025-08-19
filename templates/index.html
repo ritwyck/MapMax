@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Interactive Boardgame Map</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+  <!-- Leaflet Draw CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+  <!-- Marker Cluster CSS (prepared for future) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
+  <!-- Main CSS (your path may require adjusting depending on your project structure) -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+
+  <style>
+    .territory-item {
+      margin-bottom: 0.5em;
+    }
+    .territory-item input[type="text"] {
+      width: 60%;
+      margin-right: 0.5em;
+    }
+    .territory-item input[type="color"] {
+      vertical-align: middle;
+      width: 20%;
+      border: none;
+      cursor: pointer;
+    }
+    .territory-label {
+      font-weight: bold;
+      color: #222;
+      user-select: none;
+    }
+    #map { /* Guarantee the map always shows */
+      width: 100%;
+      height: 85vh;
+      min-height: 500px;
+    }
+  </style>
+</head>
+<body>
+  <header>🛡️ Interactive Boardgame Map</header>
+  
+  <main>
+    <div id="sidebar">
+      <div id="search-section">
+        <input type="text" id="location-search" placeholder="Search location to add a territory" autocomplete="off" spellcheck="false" />
+        <ul id="autocomplete-results" class="autocomplete-list" hidden></ul>
+      </div>
+      <button id="clear-all">Clear All Territories and Markers</button>
+
+      <div id="territories-section">
+        <h3>Territories</h3>
+        <div id="territories-list"></div>
+      </div>
+
+      <div id="points-section">
+        <h3>Points</h3>
+        <div id="points-list"></div>
+      </div>
+
+      <div id="message"></div>
+    </div>
+    <div id="map"></div>
+  </main>
+
+  <footer>Created with ❤️ using Leaflet</footer>
+
+  <!-- Core JS Libraries -->
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+
+  <!-- Application JS -->
+  <script src="{{ url_for('static', filename='js/leaflet_draw.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
