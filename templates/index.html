@@ -1,81 +1,102 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Interactive Boardgame Map</title>
-
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
-  <!-- Leaflet Draw CSS -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
-  <!-- Marker Cluster CSS (prepared for future) -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
-  <!-- Main CSS (your path may require adjusting depending on your project structure) -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
-
-  <style>
-    .territory-item {
-      margin-bottom: 0.5em;
-    }
-    .territory-item input[type="text"] {
-      width: 60%;
-      margin-right: 0.5em;
-    }
-    .territory-item input[type="color"] {
-      vertical-align: middle;
-      width: 20%;
-      border: none;
-      cursor: pointer;
-    }
-    .territory-label {
-      font-weight: bold;
-      color: #222;
-      user-select: none;
-    }
-    #map { /* Guarantee the map always shows */
-      width: 100%;
-      height: 85vh;
-      min-height: 500px;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interactive Map Modes App</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+<style>
+  html, body {height: 100%; margin: 0; padding: 0; background: #20222a; color: #eaeaea; font-family: Arial, sans-serif;}
+  header {background: #282f44; padding: 1rem 0; text-align: center;}
+  #mode-buttons {margin-bottom: 0.5rem;}
+  #mode-buttons button {
+    background: #3a4360; border: none; color: white; padding: 10px 18px;
+    margin: 0 6px; font-size: 1rem; border-radius: 5px;
+    cursor: pointer; box-shadow: 0 2px 5px rgba(50,60,90,0.4);
+    transition: background 0.3s ease;
+  }
+  #mode-buttons button:hover, #mode-buttons button.active {
+    background: #4287f5;
+  }
+  #container {display: flex; height: calc(100vh - 100px);}
+  #sidebar {
+    width: 350px; background: #232946; padding: 1.5rem;
+    box-sizing: border-box; overflow-y: auto;
+  }
+  #sidebar h3 {margin-top:0;}
+  #map {flex-grow: 1; height: 100%; min-width: 0;}
+  footer {
+    background: #282f44; color: white; text-align: center; padding: 0.8rem 0;
+    position: fixed; bottom: 0; left: 0; right: 0; font-size: 0.95rem;
+  }
+  .hidden {display:none;}
+  .modal-bg {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background-color: rgba(0,0,0,0.27);
+    display: none; justify-content: center; align-items: center;
+    z-index: 1500;
+  }
+  .modal-bg.active { display: flex; }
+  .modal {
+    background: #fff; border-radius: 10px;
+    padding: 2rem 1.8rem; min-width: 280px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.22);
+    color: #333;
+    font-size: 1rem;
+  }
+  .territory-label {
+    font-weight: 700;
+    color: #232946;
+    font-size: 1.1rem;
+    user-select: none;
+  }
+  .territory-edit-row {
+    margin-bottom: 0.8em; display: flex; align-items: center;
+  }
+  .territory-edit-row input[type=text] {
+    flex-grow: 1; margin-right: 0.6em; padding: 6px 8px; border-radius: 5px; border: 1px solid #ccc;
+  }
+  .territory-edit-row input[type=color] {
+    width: 35px; height: 32px; border: none; cursor: pointer;
+  }
+</style>
 </head>
 <body>
-  <header>🛡️ Interactive Boardgame Map</header>
-  
-  <main>
-    <div id="sidebar">
-      <div id="search-section">
-        <input type="text" id="location-search" placeholder="Search location to add a territory" autocomplete="off" spellcheck="false" />
-        <ul id="autocomplete-results" class="autocomplete-list" hidden></ul>
-      </div>
-      <button id="clear-all">Clear All Territories and Markers</button>
-
-      <div id="territories-section">
-        <h3>Territories</h3>
-        <div id="territories-list"></div>
-      </div>
-
-      <div id="points-section">
-        <h3>Points</h3>
-        <div id="points-list"></div>
-      </div>
-
-      <div id="message"></div>
+<header>
+  <div id="mode-buttons">
+    <button id="btn-view" class="active">🌍 Map only</button>
+    <button id="btn-midpoint">🟢 Midpoint Mode</button>
+    <button id="btn-boardgame">🎲 Boardgame Mode</button>
+  </div>
+  <h2 id="mode-title">Interactive Map</h2>
+</header>
+<div id="container">
+  <div id="sidebar">
+    <!-- Midpoint UI -->
+    <div id="midpoint-ui" class="hidden">
+      <h3>Midpoint: Select points then calculate</h3>
+      <button id="calc-midpoint">Calculate Midpoints</button>
+      <div id="midpoint-message"></div>
     </div>
-    <div id="map"></div>
-  </main>
-
-  <footer>Created with ❤️ using Leaflet</footer>
-
-  <!-- Core JS Libraries -->
-  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
-
-  <!-- Application JS -->
-  <script src="{{ url_for('static', filename='js/leaflet_draw.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <!-- Boardgame UI -->
+    <div id="boardgame-ui" class="hidden">
+      <h3>Boardgame Designer</h3>
+      <div id="boardgame-step"></div>
+      <div id="territories-ui" style="margin-top: 1.2rem;"></div>
+    </div>
+  </div>
+  <div id="map"></div>
+</div>
+<footer>Created with ❤️ using Leaflet</footer>
+<div id="modal-bg" class="modal-bg">
+  <div class="modal" id="modal-content"></div>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+<script src="{{ url_for('static', filename='js/leaflet_draw.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

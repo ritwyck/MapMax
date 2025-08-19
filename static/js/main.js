@@ -1,157 +1,215 @@
-const map = window.map;
-const drawnItems = window.drawnItems;
-const territories = window.territories;
+let mode = 'view';
+let points = [];
+let midpointMarkers = L.layerGroup().addTo(map);
+let boardLayer = null, numTerritories = 0;
+let territoryLayers = [];
+let territoryMeta = []; // {layer, name, color}
 
-const points = [];
-const pointMarkers = L.layerGroup().addTo(map);
-
-const pointsListEl = document.getElementById('points-list');
-const territoriesListEl = document.getElementById('territories-list');
-const messageEl = document.getElementById('message');
-const clearAllBtn = document.getElementById('clear-all');
-const searchInput = document.getElementById('location-search');
-const autocompleteResults = document.getElementById('autocomplete-results');
-
-function rgbToHex(rgb) {
-  if (!rgb) return '#3388ff';
-  const parts = rgb.match(/\d+/g);
-  if (!parts) return '#3388ff';
-  return '#' + parts.map(x => (+x).toString(16).padStart(2, '0')).join('');
-}
-
-function updateTerritoriesList() {
-  territoriesListEl.innerHTML = '';
-  territories.forEach(({ name, style, layer }, id) => {
-    const div = document.createElement('div');
-    div.className = 'territory-item';
-
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.value = name || '';
-    nameInput.onchange = e => {
-      const newName = e.target.value.trim() || 'Territory';
-      territories.get(id).name = newName;
-      layer.unbindTooltip();
-      layer.bindTooltip(newName, { permanent: true, direction: 'center', className: 'territory-label' }).openTooltip();
+function showModal(html, onSubmit) {
+  const bg = document.getElementById('modal-bg');
+  const content = document.getElementById('modal-content');
+  content.innerHTML = html;
+  bg.classList.add('active');
+  const closeModal = () => { bg.classList.remove('active'); };
+  const form = content.querySelector('form');
+  if (form && onSubmit) {
+    form.onsubmit = function(e) {
+      e.preventDefault();
+      onSubmit(form);
+      closeModal();
+      return false;
     };
-    div.appendChild(nameInput);
-
-    // Color picker
-    const colorInput = document.createElement('input');
-    colorInput.type = 'color';
-    colorInput.value = rgbToHex(style.fillColor);
-    colorInput.oninput = e => {
-      const newColor = e.target.value;
-      territories.get(id).style.fillColor = newColor;
-      layer.setStyle({ fillColor: newColor });
-    };
-    div.appendChild(colorInput);
-
-    territoriesListEl.appendChild(div);
-  });
-}
-
-window.updateTerritoriesList = updateTerritoriesList;
-updateTerritoriesList();
-
-function updatePointsList() {
-  pointsListEl.innerHTML = '';
-  points.forEach(({ name, lat, lon }, idx) => {
-    const div = document.createElement('div');
-    div.className = 'point-item';
-    div.textContent = `${name || 'Point'} [${lat.toFixed(5)}, ${lon.toFixed(5)}]`;
-    const btn = document.createElement('button');
-    btn.textContent = 'Remove';
-    btn.onclick = () => {
-      points.splice(idx, 1);
-      updateMap();
-    };
-    div.appendChild(btn);
-    pointsListEl.appendChild(div);
-  });
-
-  if (points.length < 2) {
-    messageEl.textContent = 'Add at least two points to calculate midpoints.';
-  } else {
-    messageEl.textContent = `Selected ${points.length} points. Calculating midpoints...`;
   }
+  bg.onclick = e => { if (e.target === bg) closeModal(); };
 }
 
-function updateMap() {
-  pointMarkers.clearLayers();
+function hideModal() { document.getElementById('modal-bg').classList.remove('active'); }
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
 
-  points.forEach(({ lat, lon, name }) => {
-    const marker = L.marker([lat, lon]);
-    if (name) marker.bindPopup(name);
-    marker.addTo(pointMarkers);
-  });
-
-  updatePointsList();
+function setMode(m) {
+  mode = m;
+  ['btn-view','btn-midpoint','btn-boardgame'].forEach(id => document.getElementById(id).classList.remove('active'));
+  document.getElementById(`btn-${m}`).classList.add('active');
+  document.getElementById('mode-title').textContent = (m === 'view') ? 'Interactive Map' :
+                                                          (m === 'midpoint') ? 'Midpoint Mode' :
+                                                          'Boardgame Mode';
+  hide('midpoint-ui'); hide('boardgame-ui');
+  if (m === 'midpoint') show('midpoint-ui');
+  if (m === 'boardgame') show('boardgame-ui');
+  if (m !== 'midpoint') { points = []; midpointMarkers.clearLayers(); }
+  if (m !== 'boardgame') { drawnItems.clearLayers(); resetBoardgame(); }
 }
 
-// Adding points via map click
+// Attach event handlers NOW to enable mode switching!!!
+document.getElementById('btn-view').onclick = () => setMode('view');
+document.getElementById('btn-midpoint').onclick = () => setMode('midpoint');
+document.getElementById('btn-boardgame').onclick = () => { setMode('boardgame'); setupBoardgameUI(); };
+
+setMode('view'); // Initial load
+
+// --- MIDPOINT MODE ---
 map.on('click', e => {
-  points.push({ lat: e.latlng.lat, lon: e.latlng.lng, name: 'Clicked Location' });
-  updateMap();
+  if (mode !== 'midpoint') return;
+  points.push([e.latlng.lat, e.latlng.lng]);
+  L.marker(e.latlng).addTo(midpointMarkers);
+  document.getElementById('midpoint-message').textContent =
+    `${points.length} points selected. Click "Calculate Midpoints" to proceed.`;
 });
-
-// Clear all
-clearAllBtn.onclick = () => {
-  points.length = 0;
-  updateMap();
-  drawnItems.clearLayers();
-  territories.clear();
-  territoriesListEl.innerHTML = '';
-  messageEl.textContent = 'Cleared all points and territories';
-  autocompleteResults.innerHTML = '';
-  autocompleteResults.hidden = true;
-  searchInput.value = '';
-};
-
-// Autocomplete search box
-let debounceTimer;
-searchInput.addEventListener('input', () => {
-  const query = searchInput.value.trim();
-  if (query.length < 3) {
-    autocompleteResults.innerHTML = '';
-    autocompleteResults.hidden = true;
+document.getElementById('calc-midpoint').onclick = () => {
+  if (points.length < 2) {
+    document.getElementById('midpoint-message').textContent = 'Select at least 2 points.';
     return;
   }
-  
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    fetch('/geocode?q=' + encodeURIComponent(query))
-      .then(resp => resp.json())
-      .then(data => {
-        autocompleteResults.innerHTML = '';
-        if (!data.length) {
-          autocompleteResults.hidden = true;
-          return;
-        }
-        data.forEach(item => {
-          const li = document.createElement('li');
-          li.textContent = item.display_name;
-          li.onclick = () => {
-            points.push({ lat: item.lat, lon: item.lon, name: item.display_name });
-            updateMap();
-            map.setView([item.lat, item.lon], 8);
-            autocompleteResults.innerHTML = '';
-            autocompleteResults.hidden = true;
-            searchInput.value = '';
-          };
-          autocompleteResults.appendChild(li);
-        });
-        autocompleteResults.hidden = false;
-      })
-      .catch(() => {
-        autocompleteResults.innerHTML = '';
-        autocompleteResults.hidden = true;
+  fetch('/calculate_midpoints', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ points })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.midpoints) {
+      data.midpoints.forEach(mp => {
+        L.circleMarker([mp.lat, mp.lon], {
+          radius: 7, color: mp.type === 'great-circle' ? 'lime' : 'red',
+        }).bindPopup(mp.type).addTo(midpointMarkers);
       });
-  }, 300);
-});
+      document.getElementById('midpoint-message').textContent = 'Midpoints shown on map!';
+    } else {
+      document.getElementById('midpoint-message').textContent = 'Error occurred.';
+    }
+  });
+};
 
-document.addEventListener('click', e => {
-  if (!searchInput.contains(e.target) && !autocompleteResults.contains(e.target)) {
-    autocompleteResults.hidden = true;
+// --- BOARDGAME MODE ---
+
+function setupBoardgameUI() {
+  document.getElementById('boardgame-step').innerHTML = `
+    <p>Step 1: Draw your board shape.</p>
+    <button id="draw-polygon">Draw Polygon</button>
+    <button id="draw-rectangle">Draw Rectangle</button>
+    <div id="board-drawn"></div>`;
+  document.getElementById('draw-polygon').onclick = startBoardPolygon;
+  document.getElementById('draw-rectangle').onclick = startBoardRect;
+  document.getElementById('territories-ui').innerHTML = '';
+  cleanupBoardTerritories();
+}
+
+function resetBoardgame() {
+  if (boardLayer) { drawnItems.removeLayer(boardLayer); boardLayer = null; }
+  numTerritories = 0;
+  cleanupBoardTerritories();
+  document.getElementById('boardgame-step').innerHTML = '';
+  document.getElementById('territories-ui').innerHTML = '';
+}
+function cleanupBoardTerritories() {
+  territoryLayers.forEach(l => map.removeLayer(l));
+  territoryLayers = [];
+  territoryMeta = [];
+}
+
+function startBoardPolygon() {
+  drawnItems.clearLayers();
+  boardLayer = null;
+  cleanupBoardTerritories();
+  new L.Draw.Polygon(map, { showArea:true }).enable();
+  map.once(L.Draw.Event.CREATED, e => {
+    boardLayer = e.layer;
+    drawnItems.addLayer(boardLayer);
+    document.getElementById('board-drawn').innerHTML = '<span style="color:#9fdada;">Board polygon drawn!</span>';
+    promptNumTerritories();
+  });
+}
+
+function startBoardRect() {
+  drawnItems.clearLayers();
+  boardLayer = null;
+  cleanupBoardTerritories();
+  new L.Draw.Rectangle(map).enable();
+  map.once(L.Draw.Event.CREATED, e => {
+    boardLayer = e.layer;
+    drawnItems.addLayer(boardLayer);
+    document.getElementById('board-drawn').innerHTML = '<span style="color:#9fdada;">Board rectangle drawn!</span>';
+    promptNumTerritories();
+  });
+}
+
+function promptNumTerritories() {
+  showModal(`
+    <form>
+      <label>Step 2: Number of Territories</label><br/>
+      <input type="number" min="2" max="20" id="n-territories" value="4" required/><br/><br/>
+      <button type="submit">Generate Territories</button>
+    </form>`, form => {
+      numTerritories = +form.querySelector('#n-territories').value;
+      if (numTerritories >= 2) {
+        document.getElementById('territories-ui').innerHTML = `<p><b>${numTerritories}</b> territories generating...</p>`;
+        setTimeout(splitBoardIntoTerritories, 300);
+      }
+    });
+}
+
+function randomPointsInPolygon(polygon, n) {
+  const bbox = turf.bbox(polygon);
+  const pts = [];
+  while (pts.length < n) {
+    const p = [Math.random()*(bbox[2]-bbox)+bbox, Math.random()*(bbox[3]-bbox[1])+bbox[1]];
+    if (turf.booleanPointInPolygon(p, polygon)) pts.push(p);
   }
-});
+  return pts;
+}
+
+function splitBoardIntoTerritories() {
+  cleanupBoardTerritories();
+  if (!boardLayer) return;
+  const geojson = boardLayer.toGeoJSON();
+  const boardPoly = (geojson.geometry.type === "Polygon" || geojson.geometry.type === "MultiPolygon") ? geojson : turf.polygon(geojson.geometry.coordinates);
+  const seedPoints = randomPointsInPolygon(boardPoly, numTerritories);
+  const fc = turf.featureCollection(seedPoints.map(p => turf.point(p)));
+  const voronoi = turf.voronoi(fc, {bbox: turf.bbox(boardPoly)});
+  let count = 0;
+  const colormap = ["#ECB390","#DF7861","#7F4F24","#B6C867","#6F9CEB","#8A2E83","#C1D0B5","#6497b1","#005b96","#e9967a","#b9b5d1","#62b6cb","#1b2845","#aa4465","#4e89ae","#22577a","#33a1fd","#e67059","#40916c","#ffd166"];
+  for (let i=0; i<voronoi.features.length && count<numTerritories; i++) {
+    const cell = voronoi.features[i];
+    const clipped = turf.intersect(boardPoly, cell);
+    if (!clipped) continue;
+    count++;
+    const coords = (clipped.geometry.type === "Polygon") ? clipped.geometry.coordinates : [clipped.geometry.coordinates];
+    const color = colormap[count % colormap.length];
+    const territory = L.polygon(coords, {color, fillColor: color, fillOpacity: 0.5, weight: 2}).addTo(map);
+    territoryLayers.push(territory);
+    territory.bindTooltip(`Territory ${count}`, {permanent:true, direction:"center", className:"territory-label"});
+    territoryMeta.push({layer: territory, name: `Territory ${count}`, color});
+  }
+  setupTerritoryEditor();
+}
+
+function setupTerritoryEditor() {
+  const container = document.getElementById('territories-ui');
+  container.innerHTML = territoryMeta.map((t, i) => `
+    <div class='territory-edit-row'>
+      <input type='text' value='${t.name}' data-i='${i}' />
+      <input type='color' value='${t.color}' data-i='${i}' />
+      <span>Territory ${i+1}</span>
+    </div>
+  `).join('');
+  
+  container.querySelectorAll("input[type=text]").forEach(inp => {
+    inp.addEventListener('input', e => {
+      const i = e.target.dataset.i;
+      territoryMeta[i].name = e.target.value;
+      const layer = territoryMeta[i].layer;
+      layer.unbindTooltip();
+      layer.bindTooltip(e.target.value, {permanent:true, direction:"center", className:"territory-label"}).openTooltip();
+    });
+  });
+  
+  container.querySelectorAll("input[type=color]").forEach(inp => {
+    inp.addEventListener('input', e => {
+      const i = e.target.dataset.i;
+      territoryMeta[i].color = e.target.value;
+      const layer = territoryMeta[i].layer;
+      layer.setStyle({color: e.target.value, fillColor: e.target.value});
+    });
+  });
+}

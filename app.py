@@ -1,5 +1,4 @@
 import math
-import requests
 from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
@@ -66,35 +65,5 @@ def calculate_midpoints():
     return jsonify({'midpoints': midpoints})
 
 
-@app.route('/geocode', methods=['GET'])
-def geocode():
-    query = request.args.get('q', '')
-    if not query:
-        return jsonify([])
-    url = 'https://nominatim.openstreetmap.org/search'
-    params = {
-        'q': query,
-        'format': 'json',
-        'addressdetails': 1,
-        'limit': 5,
-    }
-    headers = {
-        'User-Agent': 'MidpointApp/1.0 (your-email@example.com)'
-    }
-    try:
-        response = requests.get(url, params=params, headers=headers)
-        results = response.json()
-        places = []
-        for r in results:
-            places.append({
-                'display_name': r['display_name'],
-                'lat': float(r['lat']),
-                'lon': float(r['lon'])
-            })
-        return jsonify(places)
-    except Exception:
-        return jsonify([])
-
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8001, debug=True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8001, debug=True)
